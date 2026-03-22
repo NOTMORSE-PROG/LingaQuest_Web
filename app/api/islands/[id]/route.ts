@@ -50,11 +50,16 @@ export async function GET(
         : null;
     const islandPassed = allPinsCompleted && (cumulativeAccuracy ?? 0) >= ISLAND_PASS_THRESHOLD;
 
+    const ingaySeenRecord = await prisma.ingaySeen.findUnique({
+      where: { userId_islandId: { userId: auth.userId, islandId: id } },
+    });
+
     return NextResponse.json({
       ...islandWithProgress,
       allPinsCompleted,
       cumulativeAccuracy,
       islandPassed,
+      ingaySeen: !!ingaySeenRecord,
     });
   } catch (err: unknown) {
     console.error("[GET /api/islands/[id]]", err);

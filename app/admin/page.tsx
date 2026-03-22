@@ -290,10 +290,10 @@ export default function AdminAudioPage() {
             <p style={{ color: "#f5c518", fontWeight: 700, marginBottom: 12, fontSize: 15 }}>Teacher Guide — Audio Upload</p>
             <ol style={{ paddingLeft: 20, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
               <li>
-                <strong style={{ color: "#e2c97e" }}>Challenge Audio tab</strong> — For each challenge you'll see the full script text (what was recorded). Find the matching MP3 file on your computer and click <strong>Upload MP3</strong>. A <span style={{ color: "#22c55e" }}>green border</span> means the audio is already uploaded; grey means it's missing.
+                <strong style={{ color: "#e2c97e" }}>Challenge Audio tab</strong> — For each challenge you&apos;ll see the full script text (what was recorded). Find the matching MP3 file on your computer and click <strong>Upload MP3</strong>. A <span style={{ color: "#22c55e" }}>green border</span> means the audio is already uploaded; grey means it&apos;s missing.
               </li>
               <li>
-                <strong style={{ color: "#e2c97e" }}>NPC Dialogue Audio tab</strong> — Each island has 4 voice slots: Captain Salita's introduction, success message, and fail message, plus Ingay's warning voice. Upload the matching MP3 for each.
+                <strong style={{ color: "#e2c97e" }}>NPC Dialogue Audio tab</strong> — Each island has 4 voice slots: Captain Salita&apos;s introduction, success message, and fail message, plus Ingay&apos;s warning voice. Upload the matching MP3 for each.
               </li>
               <li>
                 <strong style={{ color: "#e2c97e" }}>File format</strong> — MP3 files only (<code style={{ background: "#1f2937", padding: "1px 5px", borderRadius: 4 }}>.mp3</code>). Keep files under 10MB for best performance.
@@ -368,7 +368,7 @@ export default function AdminAudioPage() {
                           </p>
                           {ch.audioScript && (
                             <p style={{ color: "#9ca3af", fontSize: 13, margin: "0 0 8px", lineHeight: 1.5 }}>
-                              "{ch.audioScript.length > 160 ? ch.audioScript.slice(0, 160) + "…" : ch.audioScript}"
+                              &ldquo;{ch.audioScript.length > 160 ? ch.audioScript.slice(0, 160) + "…" : ch.audioScript}&rdquo;
                             </p>
                           )}
                           {hasAudio && (
@@ -402,7 +402,7 @@ export default function AdminAudioPage() {
       {tab === "npc" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
           <p style={{ color: "#9ca3af", fontSize: 13, margin: "-8px 0 0" }}>
-            Upload voice clips for Captain Salita's NPC dialogue and Ingay's warning per island.
+            Upload voice clips for Captain Salita&apos;s NPC dialogue and Ingay&apos;s warning per island.
           </p>
           {islands.map((island) => (
             <div key={island.id} style={{ background: "#111827", border: "1px solid #1f3a5c", borderRadius: 16, padding: "20px 24px" }}>
@@ -429,7 +429,7 @@ export default function AdminAudioPage() {
                     <p style={{ color: "#d1d5db", fontWeight: 600, fontSize: 13, margin: "0 0 4px" }}>{label}</p>
                     {text && (
                       <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 6px", lineHeight: 1.5, fontStyle: "italic" }}>
-                        "{text.length > 120 ? text.slice(0, 120) + "…" : text}"
+                        &ldquo;{text.length > 120 ? text.slice(0, 120) + "…" : text}&rdquo;
                       </p>
                     )}
                     {url && IS_REAL_URL(url) && (

@@ -65,18 +65,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: SERVER_ERRORS.INVALID_BODY }, { status: 400 });
     }
 
-    const { pinId, hintsUsed, accuracy } = body as Record<string, unknown>;
+    const { pinId, accuracy } = body as Record<string, unknown>;
 
     if (!pinId || typeof pinId !== "string") {
       return NextResponse.json({ error: "pinId is required." }, { status: 400 });
-    }
-
-    // BUG 17 FIX: validate hintsUsed type and range
-    if (typeof hintsUsed !== "number" || !Number.isInteger(hintsUsed) || hintsUsed < 0) {
-      return NextResponse.json(
-        { error: "Invalid hintsUsed. Must be a non-negative integer." },
-        { status: 400 }
-      );
     }
 
     const newAccuracy = Math.min(Math.max((accuracy as number) ?? 0, 0), 100);
@@ -93,7 +85,6 @@ export async function POST(req: NextRequest) {
       update: {
         isCompleted: true,
         accuracy: bestAccuracy,
-        hintsUsed,
         completedAt: new Date(),
       },
       create: {
@@ -101,7 +92,6 @@ export async function POST(req: NextRequest) {
         pinId,
         isCompleted: true,
         accuracy: bestAccuracy,
-        hintsUsed,
         completedAt: new Date(),
       },
     });
@@ -144,11 +134,6 @@ async function checkAndAwardBadges(userId: string) {
     toAward.push("sharp_ear");
   }
 
-  // Never Lost: completed a pin with 0 hints
-  if (progress.some((p) => p.hintsUsed === 0 && p.isCompleted) && !earned.has("never_lost")) {
-    toAward.push("never_lost");
-  }
-
   // Island badges: check if all pins on an island are done
   const islands = await prisma.island.findMany({
     include: { pins: { select: { id: true } } },
@@ -159,26 +144,6 @@ async function checkAndAwardBadges(userId: string) {
     const badgeKey = `island_${island.number}` as const;
     if (island.pins.every((p) => completedPinIds.has(p.id)) && !earned.has(badgeKey)) {
       toAward.push(badgeKey);
-    }
-  }
-
-  // Ship Saver: completed an island with avg ≥ threshold but used hints on at least one pin
-  if (!earned.has("ship_saver")) {
-    const pinProgressMap = new Map(progress.map((p) => [p.pinId, p]));
-    const anyIslandPassedWithHints = islands.some(
-      (island) =>
-        island.pins.every((p) => completedPinIds.has(p.id)) &&
-        island.pins.length > 0 &&
-        island.pins.reduce(
-          (sum, p) => sum + (pinProgressMap.get(p.id)?.accuracy ?? 0),
-          0
-        ) /
-          island.pins.length >=
-          ISLAND_PASS_THRESHOLD &&
-        island.pins.some((p) => (pinProgressMap.get(p.id)?.hintsUsed ?? 0) > 0)
-    );
-    if (anyIslandPassedWithHints) {
-      toAward.push("ship_saver");
     }
   }
 
