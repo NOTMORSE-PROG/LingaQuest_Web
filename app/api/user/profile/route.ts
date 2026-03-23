@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { prisma } from "@/lib/db";
 import { getAuthUser, serializeUser } from "@/lib/auth";
 
@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json(serializeUser(updated));
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    if (err instanceof PrismaClientKnownRequestError && err.code === "P2002") {
       return NextResponse.json({ error: "Username is already taken." }, { status: 409 });
     }
     console.error("[user/profile]", err);

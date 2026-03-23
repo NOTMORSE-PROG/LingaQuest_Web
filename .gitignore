@@ -14,8 +14,9 @@ dist/
 .env.*.local
 # Keep .env.example committed
 
-# Prisma & scripts (local only)
-prisma/
+# Prisma — track schema & seed, ignore generated client artefacts
+prisma/generated/
+prisma/client/
 scripts/
 
 # TypeScript

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
-import { Prisma } from "@prisma/client";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { prisma } from "@/lib/db";
 import { signToken, serializeUser } from "@/lib/auth";
 
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
       isNewUser: true,
     });
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    if (err instanceof PrismaClientKnownRequestError && err.code === "P2002") {
       return NextResponse.json(
         { error: "Account already exists. Please sign in." },
         { status: 409 }

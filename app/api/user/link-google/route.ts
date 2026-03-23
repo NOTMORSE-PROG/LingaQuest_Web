@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
-import { Prisma } from "@prisma/client";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { prisma } from "@/lib/db";
 import { getAuthUser, serializeUser } from "@/lib/auth";
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(serializeUser(updated));
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    if (err instanceof PrismaClientKnownRequestError && err.code === "P2002") {
       return NextResponse.json(
         { error: "This Google account is already linked to another user." },
         { status: 409 }
