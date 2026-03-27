@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing file, targetType, or targetId" }, { status: 400 });
   }
 
-  const validTypes = ["challenge", "island-intro", "island-success", "island-fail", "island-ingay"];
+  const validTypes = ["challenge", "challenge-explanation", "island-intro", "island-success", "island-fail", "island-ingay", "island-bgmusic"];
   if (!validTypes.includes(targetType)) {
     return NextResponse.json({ error: "Invalid targetType" }, { status: 400 });
   }
@@ -65,6 +65,8 @@ export async function POST(req: NextRequest) {
   // Update the correct DB field based on targetType
   if (targetType === "challenge") {
     await prisma.challenge.update({ where: { id: targetId }, data: { audioUrl: url } });
+  } else if (targetType === "challenge-explanation") {
+    await prisma.challenge.update({ where: { id: targetId }, data: { explanationAudioUrl: url } });
   } else if (targetType === "island-intro") {
     await prisma.island.update({ where: { id: targetId }, data: { npcAudioIntro: url } });
   } else if (targetType === "island-success") {
@@ -73,6 +75,8 @@ export async function POST(req: NextRequest) {
     await prisma.island.update({ where: { id: targetId }, data: { npcAudioFail: url } });
   } else if (targetType === "island-ingay") {
     await prisma.island.update({ where: { id: targetId }, data: { ingayAudioUrl: url } });
+  } else if (targetType === "island-bgmusic") {
+    await prisma.island.update({ where: { id: targetId }, data: { bgMusicUrl: url } });
   }
 
   return NextResponse.json({ url });
