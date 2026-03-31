@@ -36,6 +36,27 @@ export function getMostDamagedPart(health: ShipHealth): ShipPart {
   return parts.reduce((a, b) => (a[1] < b[1] ? a : b))[0];
 }
 
+export function resolveRepairVote(votes: string[], shipHealth: ShipHealth): ShipPart {
+  if (votes.length === 0) return getMostDamagedPart(shipHealth);
+  const tally: Record<string, number> = {};
+  for (const v of votes) tally[v] = (tally[v] ?? 0) + 1;
+  const max = Math.max(...Object.values(tally));
+  const winners = Object.keys(tally).filter((k) => tally[k] === max);
+  if (winners.length === 1) return winners[0] as ShipPart;
+  // Tie: pick most-damaged among tied parts
+  return winners.reduce((a, b) =>
+    (shipHealth[a as ShipPart] ?? 0) <= (shipHealth[b as ShipPart] ?? 0) ? a : b
+  ) as ShipPart;
+}
+
+export function getNextDamagedPart(health: ShipHealth, excluding: ShipPart): ShipPart | null {
+  const parts = (Object.entries(health) as [ShipPart, number][]).filter(
+    ([p, hp]) => p !== excluding && hp > 0 && hp < 100
+  );
+  if (parts.length === 0) return null;
+  return parts.reduce((a, b) => (a[1] < b[1] ? a : b))[0];
+}
+
 export function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 6 }, () =>

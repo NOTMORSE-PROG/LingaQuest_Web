@@ -25,6 +25,7 @@ model User {
   hostedRooms      MultiplayerRoom[] @relation("HostedRooms")
   roomMemberships  RoomPlayer[]
   votes            VoteRecord[]
+  repairVotes      RepairVoteRecord[]
   ingaySeenIslands IngaySeen[]
 
   @@index([username])
@@ -143,20 +144,24 @@ model Badge {
 }
 
 model MultiplayerRoom {
-  id           String     @id @default(cuid())
-  code         String     @unique
-  hostId       String
-  status       RoomStatus @default(WAITING)
-  roundCount   Int        @default(5)
-  currentRound Int        @default(0)
-  shipHealth   Json       // { hull: 25, mast: 25, sails: 25, anchor: 25, rudder: 25 }
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  code              String     @unique
+  hostId            String
+  status            RoomStatus @default(WAITING)
+  roundCount        Int        @default(5)
+  currentRound      Int        @default(0)
+  currentQuestion   Int        @default(0)    // 0-4: which question within the current round
+  currentPartTarget String?                    // chosen ship part for the current round
+  roundChallenges   Json?                      // String[] — 5 challenge IDs for current round
+  shipHealth        Json       // { hull: 25, mast: 25, sails: 25, anchor: 25, rudder: 25 }
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  host    User         @relation("HostedRooms", fields: [hostId], references: [id])
-  players RoomPlayer[]
-  rounds  RoundResult[]
-  votes   VoteRecord[]
+  host         User                @relation("HostedRooms", fields: [hostId], references: [id])
+  players      RoomPlayer[]
+  rounds       RoundResult[]
+  votes        VoteRecord[]
+  repairVotes  RepairVoteRecord[]
 
   @@index([code])
   @@index([status])
@@ -196,17 +201,32 @@ model VoteRecord {
 }
 
 model RoundResult {
-  id          String   @id @default(cuid())
-  roomId      String
-  round       Int
-  crewAnswer  String
+  id            String   @id @default(cuid())
+  roomId        String
+  round         Int
+  questionIndex Int      @default(0)  // 0-4 within the round
+  crewAnswer    String
   correctAnswer String
-  isCorrect   Boolean
-  healthDelta Int      // +25 or -25
-  partTarget  String   // hull | mast | sails | anchor | rudder
-  createdAt   DateTime @default(now())
+  isCorrect     Boolean
+  healthDelta   Int      // +25 or -25
+  partTarget    String   // hull | mast | sails | anchor | rudder
+  createdAt     DateTime @default(now())
 
   room MultiplayerRoom @relation(fields: [roomId], references: [id])
 
-  @@unique([roomId, round])
+  @@unique([roomId, round, questionIndex])
+}
+
+model RepairVoteRecord {
+  id          String   @id @default(cuid())
+  roomId      String
+  round       Int
+  userId      String
+  chosenPart  String   // hull | mast | sails | anchor | rudder
+  submittedAt DateTime @default(now())
+
+  room MultiplayerRoom @relation(fields: [roomId], references: [id])
+  user User            @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, round, userId])
 }

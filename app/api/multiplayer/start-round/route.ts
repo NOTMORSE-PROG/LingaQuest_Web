@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { pusher, roomChannel } from "@/lib/pusher";
+import { ShipHealth } from "../../../../types/multiplayer";
 
 export async function POST(req: NextRequest) {
   const auth = await getAuthUser(req);
@@ -21,16 +22,9 @@ export async function POST(req: NextRequest) {
   if (room.status === "FINISHED")
     return NextResponse.json({ error: "Game is already finished." }, { status: 409 });
 
-  // Determine which round number we're starting
-  const nextRound = room.status === "WAITING" ? 1 : room.currentRound;
-
-  // Idempotency guard: if round already active, don't re-fire the event
-  if (nextRound === room.currentRound && room.status === "ACTIVE") {
-    return NextResponse.json({ ok: true, round: nextRound });
-  }
+  const nextRound = room.currentRound + 1;
 
   if (nextRound > room.roundCount) {
-    // All rounds done — end the game
     await prisma.multiplayerRoom.update({
       where: { id: roomId },
       data: { status: "FINISHED" },
@@ -41,38 +35,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ended: true });
   }
 
-  // Pick challenge for this round: use full challenge pool ordered deterministically
-  const challenges = await prisma.challenge.findMany({
+  // Pick 5 challenges for this round, cycling through the pool
+  const allChallenges = await prisma.challenge.findMany({
     orderBy: [
       { pin: { island: { number: "asc" } } },
       { pin: { number: "asc" } },
       { sortOrder: "asc" },
     ],
+    select: { id: true },
   });
 
-  if (challenges.length === 0) {
-    return NextResponse.json({ error: "No challenges in database. Run seed first." }, { status: 500 });
+  if (allChallenges.length === 0) {
+    return NextResponse.json(
+      { error: "No challenges in database. Run seed first." },
+      { status: 500 }
+    );
   }
 
-  const challenge = challenges[(nextRound - 1) % challenges.length];
+  const startIdx = ((nextRound - 1) * 5) % allChallenges.length;
+  const challengeIds = Array.from(
+    { length: 5 },
+    (_, i) => allChallenges[(startIdx + i) % allChallenges.length].id
+  );
 
-  // Activate the room if it was waiting
+  // Clear any stale repair votes from a previous attempt at this round
+  await prisma.repairVoteRecord.deleteMany({
+    where: { roomId, round: nextRound },
+  });
+
   await prisma.multiplayerRoom.update({
     where: { id: roomId },
     data: {
       status: "ACTIVE",
       currentRound: nextRound,
+      currentQuestion: 0,
+      currentPartTarget: null,
+      roundChallenges: challengeIds,
     },
   });
 
-  // Emit round start to all players
-  await pusher.trigger(roomChannel(roomId), "round:start", {
+  await pusher.trigger(roomChannel(roomId), "repair:start", {
     round: nextRound,
     totalRounds: room.roundCount,
-    audioUrl: challenge.audioUrl,
-    question: challenge.question,
-    choices: challenge.choices,
-    challengeId: challenge.id, // so clients can identify the challenge
+    shipHealth: room.shipHealth,
   });
 
   return NextResponse.json({ ok: true, round: nextRound });
