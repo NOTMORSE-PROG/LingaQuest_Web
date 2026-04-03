@@ -1,11 +1,11 @@
 import { ShipHealth, ShipPart } from "../types/multiplayer";
 
 export const INITIAL_SHIP_HEALTH: ShipHealth = {
-  hull: 25,
-  mast: 25,
-  sails: 25,
-  anchor: 25,
-  rudder: 25,
+  hull: 50,
+  mast: 50,
+  sails: 50,
+  anchor: 50,
+  rudder: 50,
 };
 
 export function applyHealthDelta(
@@ -55,6 +55,23 @@ export function getNextDamagedPart(health: ShipHealth, excluding: ShipPart): Shi
   );
   if (parts.length === 0) return null;
   return parts.reduce((a, b) => (a[1] < b[1] ? a : b))[0];
+}
+
+const CHOICE_LABELS = ["A", "B", "C", "D"] as const;
+
+export function shuffleChoices(
+  choices: { label: string; text: string }[],
+  correctAnswer: string
+): { shuffledChoices: { label: string; text: string }[]; shuffledAnswer: string } {
+  const arr = [...choices];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  const relabeled = arr.map((c, i) => ({ ...c, label: CHOICE_LABELS[i] }));
+  const originalCorrect = choices.find((c) => c.label === correctAnswer);
+  const newIdx = originalCorrect ? arr.findIndex((c) => c.text === originalCorrect.text) : 0;
+  return { shuffledChoices: relabeled, shuffledAnswer: CHOICE_LABELS[newIdx] };
 }
 
 export function generateRoomCode(): string {

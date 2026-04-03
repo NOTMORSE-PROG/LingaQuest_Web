@@ -230,3 +230,15 @@ model RepairVoteRecord {
 
   @@unique([roomId, round, userId])
 }
+
+model MultiplayerChallenge {
+  id          String  @id @default(cuid())
+  audioUrl    String
+  audioScript String?
+  question    String
+  choices     Json    // [{ label: "A"|"B"|"C"|"D", text: string }]
+  answer      String  // original correct label in DB ("A"–"D")
+  explanation String
+  hint        String
+  sortOrder   Int     @default(0)
+}

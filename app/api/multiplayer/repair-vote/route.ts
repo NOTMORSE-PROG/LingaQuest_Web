@@ -5,6 +5,8 @@ import { pusher, roomChannel } from "@/lib/pusher";
 import { resolveRepairVote } from "@/lib/ship";
 import { ShipHealth, ShipPart } from "../../../../types/multiplayer";
 
+type RoundChallenge = { id: string; shuffledAnswer: string; shuffledChoices: { label: string; text: string }[] };
+
 const VALID_PARTS: ShipPart[] = ["hull", "mast", "sails", "anchor", "rudder"];
 
 export async function POST(req: NextRequest) {
@@ -68,23 +70,28 @@ export async function POST(req: NextRequest) {
       shipHealth: room.shipHealth,
     });
 
-    // Auto-broadcast first question
-    const challengeIds = room.roundChallenges as string[];
-    const firstChallenge = await prisma.challenge.findUnique({
-      where: { id: challengeIds[0] },
-    });
+    // Auto-broadcast first question using shuffled choices
+    const roundChallenges = room.roundChallenges as RoundChallenge[];
+    const rc = roundChallenges[0];
 
-    if (firstChallenge) {
-      await pusher.trigger(roomChannel(roomId), "round:question", {
-        round: currentRound,
-        questionIndex: 0,
-        totalQuestions: 5,
-        audioUrl: firstChallenge.audioUrl,
-        question: firstChallenge.question,
-        choices: firstChallenge.choices,
-        challengeId: firstChallenge.id,
-        partToRepair: chosenPart,
+    if (rc) {
+      const firstChallenge = await prisma.multiplayerChallenge.findUnique({
+        where: { id: rc.id },
+        select: { audioUrl: true, question: true },
       });
+
+      if (firstChallenge) {
+        await pusher.trigger(roomChannel(roomId), "round:question", {
+          round: currentRound,
+          questionIndex: 0,
+          totalQuestions: 5,
+          audioUrl: firstChallenge.audioUrl,
+          question: firstChallenge.question,
+          choices: rc.shuffledChoices,
+          challengeId: rc.id,
+          partToRepair: chosenPart,
+        });
+      }
     }
   }
 

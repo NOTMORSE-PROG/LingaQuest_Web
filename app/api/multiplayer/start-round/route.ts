@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { pusher, roomChannel } from "@/lib/pusher";
-import { ShipHealth } from "../../../../types/multiplayer";
+import { shuffleChoices } from "@/lib/ship";
+
+type RoundChallenge = { id: string; shuffledAnswer: string; shuffledChoices: { label: string; text: string }[] };
 
 export async function POST(req: NextRequest) {
   const auth = await getAuthUser(req);
@@ -18,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   if (!room) return NextResponse.json({ error: "Room not found." }, { status: 404 });
   if (room.hostId !== auth.userId)
-    return NextResponse.json({ error: "Only the host can start rounds." }, { status: 403 });
+    return NextResponse.json({ error: "Only the host can start." }, { status: 403 });
   if (room.status === "FINISHED")
     return NextResponse.json({ error: "Game is already finished." }, { status: 409 });
 
@@ -30,37 +32,38 @@ export async function POST(req: NextRequest) {
       data: { status: "FINISHED" },
     });
     await pusher.trigger(roomChannel(roomId), "game:end", {
-      shipHealth: room.shipHealth,
+      correctCount: 0,
+      totalQuestions: 5,
     });
     return NextResponse.json({ ok: true, ended: true });
   }
 
-  // Pick 5 challenges for this round, cycling through the pool
-  const allChallenges = await prisma.challenge.findMany({
-    orderBy: [
-      { pin: { island: { number: "asc" } } },
-      { pin: { number: "asc" } },
-      { sortOrder: "asc" },
-    ],
-    select: { id: true },
+  // Pick 5 random challenges from the multiplayer-only pool
+  const allChallenges = await prisma.multiplayerChallenge.findMany({
+    select: { id: true, choices: true, answer: true },
   });
 
   if (allChallenges.length === 0) {
     return NextResponse.json(
-      { error: "No challenges in database. Run seed first." },
+      { error: "No multiplayer challenges in database. Run seed first." },
       { status: 500 }
     );
   }
 
-  const startIdx = ((nextRound - 1) * 5) % allChallenges.length;
-  const challengeIds = Array.from(
-    { length: 5 },
-    (_, i) => allChallenges[(startIdx + i) % allChallenges.length].id
-  );
+  // Fisher-Yates shuffle, take first 5
+  const pool = [...allChallenges];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const picked = pool.slice(0, Math.min(5, pool.length));
 
-  // Clear any stale repair votes from a previous attempt at this round
-  await prisma.repairVoteRecord.deleteMany({
-    where: { roomId, round: nextRound },
+  const roundChallenges = picked.map((c) => {
+    const { shuffledChoices, shuffledAnswer } = shuffleChoices(
+      c.choices as { label: string; text: string }[],
+      c.answer
+    );
+    return { id: c.id, shuffledAnswer, shuffledChoices };
   });
 
   await prisma.multiplayerRoom.update({
@@ -70,15 +73,28 @@ export async function POST(req: NextRequest) {
       currentRound: nextRound,
       currentQuestion: 0,
       currentPartTarget: null,
-      roundChallenges: challengeIds,
+      roundChallenges: roundChallenges as any,
     },
   });
 
-  await pusher.trigger(roomChannel(roomId), "repair:start", {
-    round: nextRound,
-    totalRounds: room.roundCount,
-    shipHealth: room.shipHealth,
+  // Directly emit the first question (no repair vote phase)
+  const rc = roundChallenges[0];
+  const firstChallenge = await prisma.multiplayerChallenge.findUnique({
+    where: { id: rc.id },
+    select: { audioUrl: true, question: true },
   });
+
+  if (firstChallenge) {
+    await pusher.trigger(roomChannel(roomId), "round:question", {
+      round: nextRound,
+      questionIndex: 0,
+      totalQuestions: 5,
+      audioUrl: firstChallenge.audioUrl,
+      question: firstChallenge.question,
+      choices: rc.shuffledChoices,
+      challengeId: rc.id,
+    });
+  }
 
   return NextResponse.json({ ok: true, round: nextRound });
 }

@@ -37,5 +37,16 @@ export async function POST(req: NextRequest) {
     include: { players: { include: { user: { select: { id: true, username: true } } } } },
   });
 
-  return NextResponse.json({ code: room.code, roomId: room.id });
+  return NextResponse.json({
+    code: room.code,
+    roomId: room.id,
+    room: {
+      ...room,
+      players: room.players.map((p) => ({
+        userId: p.user.id,
+        username: p.user.username,
+        joinedAt: p.joinedAt,
+      })),
+    },
+  });
 }

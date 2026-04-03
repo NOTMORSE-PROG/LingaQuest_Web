@@ -53,5 +53,15 @@ export async function POST(req: NextRequest) {
     })),
   });
 
-  return NextResponse.json({ roomId: room.id });
+  return NextResponse.json({
+    roomId: room.id,
+    room: {
+      ...updatedRoom,
+      players: updatedRoom?.players.map((p) => ({
+        userId: p.user.id,
+        username: p.user.username,
+        joinedAt: p.joinedAt,
+      })),
+    },
+  });
 }

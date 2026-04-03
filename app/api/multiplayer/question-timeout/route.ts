@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { pusher, roomChannel } from "@/lib/pusher";
-import {
-  applyHealthDelta,
-  isShipSunk,
-  crewWins,
-  getNextDamagedPart,
-} from "@/lib/ship";
-import { ShipHealth, ShipPart } from "../../../../types/multiplayer";
 
 export async function POST(req: NextRequest) {
   const auth = await getAuthUser(req);
@@ -42,22 +35,15 @@ export async function POST(req: NextRequest) {
     where: { roomId, round: currentRound, questionIndex: qIdx },
   });
 
-  const partTarget = room.currentPartTarget as ShipPart;
-  const shipHealth = room.shipHealth as unknown as ShipHealth;
+  const roundChallenges = room.roundChallenges as { id: string; shuffledAnswer: string; shuffledChoices: { label: string; text: string }[] }[];
+  const correctAnswer = roundChallenges[qIdx]?.shuffledAnswer ?? "A";
 
   let crewAnswer: string;
-  let correctAnswer: string;
   let isCorrect: boolean;
 
   if (votes.length === 0) {
     // No votes = automatic wrong
-    const challengeIds = room.roundChallenges as string[];
-    const challenge = await prisma.challenge.findUnique({
-      where: { id: challengeIds[qIdx] },
-      select: { answer: true },
-    });
-    correctAnswer = challenge?.answer ?? "A";
-    crewAnswer = correctAnswer === "A" ? "B" : "A"; // guaranteed wrong
+    crewAnswer = correctAnswer === "A" ? "B" : "A";
     isCorrect = false;
   } else {
     // Majority of what exists
@@ -66,41 +52,22 @@ export async function POST(req: NextRequest) {
       tally[v.chosenAnswer] = (tally[v.chosenAnswer] ?? 0) + 1;
     }
     crewAnswer = Object.entries(tally).reduce((a, b) => (a[1] >= b[1] ? a : b))[0];
-
-    const challengeIds = room.roundChallenges as string[];
-    const challenge = await prisma.challenge.findUnique({
-      where: { id: challengeIds[qIdx] },
-      select: { answer: true },
-    });
-    correctAnswer = challenge?.answer ?? "A";
     isCorrect = crewAnswer === correctAnswer;
   }
 
-  const healthDelta = isCorrect ? 25 : -25;
-  const newHealth = applyHealthDelta(shipHealth, partTarget, healthDelta);
-
-  let newPartTarget: ShipPart | null = null;
-  if (newHealth[partTarget] >= 100) {
-    newPartTarget = getNextDamagedPart(newHealth, partTarget);
-  }
-  const nextPartTarget = newPartTarget ?? partTarget;
-
-  const isRoundOver = qIdx === 4;
-  const gameOver = isShipSunk(newHealth) || (isRoundOver && currentRound >= room.roundCount);
+  const isGameOver = qIdx === 4;
 
   await prisma.$transaction([
     prisma.roundResult.upsert({
       where: { roomId_round_questionIndex: { roomId, round: currentRound, questionIndex: qIdx } },
-      update: { crewAnswer, correctAnswer, isCorrect, healthDelta, partTarget },
-      create: { roomId, round: currentRound, questionIndex: qIdx, crewAnswer, correctAnswer, isCorrect, healthDelta, partTarget },
+      update: { crewAnswer, correctAnswer, isCorrect, healthDelta: isCorrect ? 1 : 0, partTarget: "hull" },
+      create: { roomId, round: currentRound, questionIndex: qIdx, crewAnswer, correctAnswer, isCorrect, healthDelta: isCorrect ? 1 : 0, partTarget: "hull" },
     }),
     prisma.multiplayerRoom.update({
       where: { id: roomId },
       data: {
-        shipHealth: newHealth as object,
         currentQuestion: qIdx + 1,
-        currentPartTarget: nextPartTarget,
-        ...(gameOver ? { status: "FINISHED" } : {}),
+        ...(isGameOver ? { status: "FINISHED" } : {}),
       },
     }),
   ]);
@@ -109,24 +76,19 @@ export async function POST(req: NextRequest) {
     crewAnswer,
     correctAnswer,
     isCorrect,
-    healthDelta,
-    partTarget,
-    newShipHealth: newHealth,
     questionIndex: qIdx,
-    isRoundOver,
-    ...(newPartTarget ? { newPartTarget } : {}),
+    isGameOver,
   });
 
-  if (gameOver) {
-    await pusher.trigger(roomChannel(roomId), "game:end", { shipHealth: newHealth });
-    return NextResponse.json({ ok: true });
-  }
+  if (isGameOver) {
+    const results = await prisma.roundResult.findMany({
+      where: { roomId, round: currentRound },
+    });
+    const correctCount = results.filter((r) => r.isCorrect).length;
 
-  if (isRoundOver) {
-    await pusher.trigger(roomChannel(roomId), "round:end", {
-      round: currentRound,
-      totalRounds: room.roundCount,
-      shipHealth: newHealth,
+    await pusher.trigger(roomChannel(roomId), "game:end", {
+      correctCount,
+      totalQuestions: 5,
     });
   }
 

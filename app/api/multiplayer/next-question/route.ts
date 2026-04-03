@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { pusher, roomChannel } from "@/lib/pusher";
 
+type RoundChallenge = { id: string; shuffledAnswer: string; shuffledChoices: { label: string; text: string }[] };
+
 export async function POST(req: NextRequest) {
   const auth = await getAuthUser(req);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,9 +25,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No next question available." }, { status: 409 });
   }
 
-  const challengeIds = room.roundChallenges as string[];
-  const challenge = await prisma.challenge.findUnique({
-    where: { id: challengeIds[qIdx] },
+  const roundChallenges = room.roundChallenges as RoundChallenge[];
+  const rc = roundChallenges[qIdx];
+
+  if (!rc) {
+    return NextResponse.json({ error: "Challenge not found." }, { status: 500 });
+  }
+
+  // Fetch audioUrl and question text from DB (shuffledChoices already stored)
+  const challenge = await prisma.multiplayerChallenge.findUnique({
+    where: { id: rc.id },
+    select: { audioUrl: true, question: true },
   });
 
   if (!challenge) {
@@ -38,8 +48,8 @@ export async function POST(req: NextRequest) {
     totalQuestions: 5,
     audioUrl: challenge.audioUrl,
     question: challenge.question,
-    choices: challenge.choices,
-    challengeId: challenge.id,
+    choices: rc.shuffledChoices,
+    challengeId: rc.id,
     partToRepair: room.currentPartTarget,
   });
 

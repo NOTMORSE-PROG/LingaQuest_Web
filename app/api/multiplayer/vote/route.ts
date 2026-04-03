@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { pusher, roomChannel } from "@/lib/pusher";
-import {
-  applyHealthDelta,
-  isShipSunk,
-  crewWins,
-  getNextDamagedPart,
-} from "@/lib/ship";
-import { ShipHealth, ShipPart } from "../../../../types/multiplayer";
 
 export async function POST(req: NextRequest) {
   const auth = await getAuthUser(req);
@@ -95,43 +88,24 @@ async function resolveQuestion(
   }
   const crewAnswer = Object.entries(tally).reduce((a, b) => (a[1] >= b[1] ? a : b))[0];
 
-  // Fetch correct answer from this round's challenge pool
-  const challengeIds = room.roundChallenges as string[];
-  const challenge = await prisma.challenge.findUnique({
-    where: { id: challengeIds[qIdx] },
-    select: { answer: true },
-  });
-  const correctAnswer = challenge?.answer ?? "A";
+  // Get correct answer from the shuffled challenge data
+  const roundChallenges = room.roundChallenges as { id: string; shuffledAnswer: string; shuffledChoices: { label: string; text: string }[] }[];
+  const correctAnswer = roundChallenges[qIdx]?.shuffledAnswer ?? "A";
   const isCorrect = crewAnswer === correctAnswer;
-  const healthDelta = isCorrect ? 25 : -25;
 
-  const partTarget = room.currentPartTarget as ShipPart;
-  const shipHealth = room.shipHealth as ShipHealth;
-  const newHealth = applyHealthDelta(shipHealth, partTarget, healthDelta);
-
-  // Auto-shift if chosen part hits 100%
-  let newPartTarget: ShipPart | null = null;
-  if (newHealth[partTarget] >= 100) {
-    newPartTarget = getNextDamagedPart(newHealth, partTarget);
-  }
-  const nextPartTarget = newPartTarget ?? partTarget;
-
-  const isRoundOver = qIdx === 4;
-  const gameOver = isShipSunk(newHealth) || (isRoundOver && round >= room.roundCount);
+  const isGameOver = qIdx === 4; // Last question (0-indexed)
 
   await prisma.$transaction([
     prisma.roundResult.upsert({
       where: { roomId_round_questionIndex: { roomId, round, questionIndex: qIdx } },
-      update: { crewAnswer, correctAnswer, isCorrect, healthDelta, partTarget },
-      create: { roomId, round, questionIndex: qIdx, crewAnswer, correctAnswer, isCorrect, healthDelta, partTarget },
+      update: { crewAnswer, correctAnswer, isCorrect, healthDelta: isCorrect ? 1 : 0, partTarget: "hull" },
+      create: { roomId, round, questionIndex: qIdx, crewAnswer, correctAnswer, isCorrect, healthDelta: isCorrect ? 1 : 0, partTarget: "hull" },
     }),
     prisma.multiplayerRoom.update({
       where: { id: roomId },
       data: {
-        shipHealth: newHealth as object,
         currentQuestion: qIdx + 1,
-        currentPartTarget: nextPartTarget,
-        ...(gameOver ? { status: "FINISHED" } : {}),
+        ...(isGameOver ? { status: "FINISHED" } : {}),
       },
     }),
   ]);
@@ -140,98 +114,20 @@ async function resolveQuestion(
     crewAnswer,
     correctAnswer,
     isCorrect,
-    healthDelta,
-    partTarget,
-    newShipHealth: newHealth,
     questionIndex: qIdx,
-    isRoundOver,
-    ...(newPartTarget ? { newPartTarget } : {}),
+    isGameOver,
   });
 
-  if (gameOver) {
-    await pusher.trigger(roomChannel(roomId), "game:end", { shipHealth: newHealth });
-    // Badge awards run async — don't await to avoid blocking
-    awardMultiplayerBadges(roomId, room.players.map((p: any) => p.userId), newHealth).catch(() => {});
-    return;
-  }
-
-  if (isRoundOver) {
-    await pusher.trigger(roomChannel(roomId), "round:end", {
-      round,
-      totalRounds: room.roundCount,
-      shipHealth: newHealth,
+  if (isGameOver) {
+    // Count correct answers for this game
+    const results = await prisma.roundResult.findMany({
+      where: { roomId, round },
     });
-  }
-}
+    const correctCount = results.filter((r) => r.isCorrect).length;
 
-async function awardMultiplayerBadges(
-  roomId: string,
-  playerIds: string[],
-  finalHealth: ShipHealth
-) {
-  const room = await prisma.multiplayerRoom.findUnique({
-    where: { id: roomId },
-    include: { rounds: true },
-  });
-  if (!room) return;
-
-  const allResults = room.rounds;
-  const won = crewWins(finalHealth);
-
-  for (const userId of playerIds) {
-    const toAward: string[] = [];
-
-    // unsinkable: all 5 parts at 100
-    if (Object.values(finalHealth).every((hp) => (hp as number) >= 100)) {
-      toAward.push("unsinkable");
-    }
-
-    // true_crew: won with zero wrong votes
-    if (won && allResults.every((r) => r.isCorrect)) {
-      toAward.push("true_crew");
-    }
-
-    // unanimous: any question where all votes matched the correct answer
-    const questionGroups = await prisma.voteRecord.groupBy({
-      by: ["round", "questionIndex"],
-      where: { roomId },
+    await pusher.trigger(roomChannel(roomId), "game:end", {
+      correctCount,
+      totalQuestions: 5,
     });
-    for (const g of questionGroups) {
-      const questionVotes = await prisma.voteRecord.findMany({
-        where: { roomId, round: g.round, questionIndex: g.questionIndex },
-      });
-      const result = allResults.find(
-        (r) => r.round === g.round && r.questionIndex === g.questionIndex
-      );
-      if (
-        result?.isCorrect &&
-        questionVotes.length > 0 &&
-        questionVotes.every((v) => v.chosenAnswer === result.crewAnswer)
-      ) {
-        toAward.push("unanimous");
-        break;
-      }
-    }
-
-    // ship_saver: won ≥3 sessions total
-    if (won) {
-      const wins = await prisma.multiplayerRoom.count({
-        where: {
-          status: "FINISHED",
-          players: { some: { userId } },
-        },
-      });
-      // We check after this win is recorded; wins ≥ 3 (this session may or may not be counted yet)
-      if (wins >= 3) toAward.push("ship_saver");
-    }
-
-    // Award all badges (upsert — idempotent)
-    for (const badgeType of [...new Set(toAward)]) {
-      await prisma.badge.upsert({
-        where: { userId_badgeType: { userId, badgeType } },
-        update: {},
-        create: { userId, badgeType },
-      });
-    }
   }
 }
