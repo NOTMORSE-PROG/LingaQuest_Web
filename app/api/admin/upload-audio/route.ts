@@ -56,6 +56,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File must be an MP3 audio file" }, { status: 400 });
     }
 
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "File too large. Maximum size is 50MB." }, { status: 400 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const publicId = `${targetType}-${targetId}`;
 
