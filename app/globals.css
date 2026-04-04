@@ -1,0 +1,25 @@
+/* ── Button hover effects ─────────────────────────────────────────────────── */
+
+/* Solid fill buttons (yellow, amber, green, red) — darken on hover */
+.btn-hover {
+  transition: filter 0.15s ease;
+}
+.btn-hover:not(:disabled):hover {
+  filter: brightness(0.88);
+}
+
+/* Ghost / transparent / outline buttons — subtle fill on hover */
+.btn-hover-ghost {
+  transition: background-color 0.15s ease;
+}
+.btn-hover-ghost:not(:disabled):hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Red outline delete button — light red fill on hover */
+.btn-hover-danger {
+  transition: background-color 0.15s ease;
+}
+.btn-hover-danger:not(:disabled):hover {
+  background-color: #fee2e2 !important;
+}

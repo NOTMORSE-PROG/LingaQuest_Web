@@ -91,6 +91,7 @@ export default function DashboardPage() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
+            className="btn-hover-ghost"
             style={{
               padding: "10px 20px",
               fontSize: 14,
@@ -362,6 +363,7 @@ function PerformanceTab({ data, loading, error }: { data: any; loading: boolean;
             <div key={isl.islandNumber} style={{ border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
               <button
                 onClick={() => setExpanded(expanded === isl.islandNumber ? null : isl.islandNumber)}
+                className="btn-hover-ghost"
                 style={{
                   width: "100%", background: expanded === isl.islandNumber ? "#fefce8" : "#ffffff",
                   border: "none", padding: "14px 20px", cursor: "pointer", textAlign: "left",

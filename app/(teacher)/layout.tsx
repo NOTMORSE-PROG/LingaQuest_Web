@@ -87,6 +87,7 @@ export default function TeacherLayout({ children }: { children: ReactNode }) {
           />
           <button
             type="submit" disabled={logging}
+            className="btn-hover"
             style={{ width: "100%", background: "#f5c518", color: "#0a0e1a", border: "none", borderRadius: 10, padding: "12px", fontWeight: 700, fontSize: 16, cursor: logging ? "not-allowed" : "pointer" }}
           >
             {logging ? "Logging in..." : "Log In"}
@@ -146,6 +147,7 @@ export default function TeacherLayout({ children }: { children: ReactNode }) {
           </div>
           <button
             onClick={logout}
+            className="btn-hover-ghost"
             style={{ background: "transparent", border: "1px solid #d1d5db", color: "#64748b", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}
           >
             Log out

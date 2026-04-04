@@ -107,6 +107,7 @@ function UploadButton({
       <button
         onClick={() => { setState("idle"); inputRef.current?.click(); }}
         disabled={isDisabled}
+        className="btn-hover"
         style={{
           background: isDisabled
             ? "#94a3b8"
@@ -178,6 +179,7 @@ function DeleteButton({
       <button
         onClick={handleDelete}
         disabled={state === "deleting"}
+        className="btn-hover-danger"
         style={{
           background: "transparent",
           color: "#dc2626",
@@ -283,6 +285,7 @@ export default function AudioManagerPage() {
       <div style={{ marginBottom: "1.5rem" }}>
         <button
           onClick={() => setShowGuide((v) => !v)}
+          className="btn-hover-ghost"
           style={{
             background: "transparent", border: "1px solid #e2e8f0", color: "#1e293b",
             borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13,
@@ -336,6 +339,7 @@ export default function AudioManagerPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
             onClick={() => setFilterIsland(null)}
+            className="btn-hover"
             style={{
               background: filterIsland === null ? "#f5c518" : "#f1f5f9",
               color: filterIsland === null ? "#0a0e1a" : "#475569",
@@ -349,6 +353,7 @@ export default function AudioManagerPage() {
             <button
               key={isl.id}
               onClick={() => setFilterIsland(isl.number)}
+              className="btn-hover"
               style={{
                 background: filterIsland === isl.number ? "#f5c518" : "#f1f5f9",
                 color: filterIsland === isl.number ? "#0a0e1a" : "#475569",
