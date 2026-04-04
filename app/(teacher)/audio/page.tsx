@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useTeacherAuth } from "../layout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Challenge {
@@ -36,7 +37,6 @@ interface Island {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 const IS_REAL_URL = (url: string) =>
   url.startsWith("https://res.cloudinary.com") ||
   (url.startsWith("https://") && !url.includes("assets.linguaquest.app"));
@@ -47,15 +47,19 @@ function UploadButton({
   targetId,
   token,
   onDone,
+  hasAudio,
 }: {
   targetType: string;
   targetId: string;
   token: string;
   onDone: (url: string) => void;
+  hasAudio: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+
+  const isDisabled = state === "uploading" || hasAudio;
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -74,7 +78,12 @@ function UploadButton({
         headers: { Authorization: `Bearer ${token}` },
         body,
       });
-      const data = await res.json();
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Server error (${res.status}). Try a smaller file.`);
+      }
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
       setState("done");
       onDone(data.url);
@@ -97,20 +106,91 @@ function UploadButton({
       />
       <button
         onClick={() => { setState("idle"); inputRef.current?.click(); }}
-        disabled={state === "uploading"}
+        disabled={isDisabled}
         style={{
-          background: state === "done" ? "#16a34a" : state === "error" ? "#dc2626" : "#d97706",
+          background: isDisabled
+            ? "#94a3b8"
+            : state === "done" ? "#16a34a" : state === "error" ? "#dc2626" : "#d97706",
           color: "white",
           border: "none",
           borderRadius: 8,
           padding: "6px 14px",
           fontSize: 13,
-          cursor: state === "uploading" ? "not-allowed" : "pointer",
+          cursor: isDisabled ? "not-allowed" : "pointer",
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          opacity: isDisabled ? 0.7 : 1,
+        }}
+      >
+        {state === "uploading" ? "Uploading..." : state === "done" ? "Replaced" : hasAudio ? "Uploaded" : "Upload MP3"}
+      </button>
+      {state === "error" && (
+        <span style={{ color: "#dc2626", fontSize: 12 }}>{errorMsg}</span>
+      )}
+    </div>
+  );
+}
+
+function DeleteButton({
+  targetType,
+  targetId,
+  token,
+  onDeleted,
+}: {
+  targetType: string;
+  targetId: string;
+  token: string;
+  onDeleted: () => void;
+}) {
+  const [state, setState] = useState<"idle" | "deleting" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  async function handleDelete() {
+    if (!confirm("Delete this audio clip? This cannot be undone.")) return;
+    setState("deleting");
+    setErrorMsg("");
+
+    try {
+      const res = await fetch(`${API}/api/admin/delete-audio`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ targetType, targetId }),
+      });
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Server error (${res.status})`);
+      }
+      if (!res.ok) throw new Error(data.error ?? "Delete failed");
+      onDeleted();
+    } catch (err: any) {
+      setState("error");
+      setErrorMsg(err.message);
+    }
+  }
+
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+      <button
+        onClick={handleDelete}
+        disabled={state === "deleting"}
+        style={{
+          background: "transparent",
+          color: "#dc2626",
+          border: "1px solid #dc2626",
+          borderRadius: 8,
+          padding: "6px 14px",
+          fontSize: 13,
+          cursor: state === "deleting" ? "not-allowed" : "pointer",
           fontWeight: 600,
           whiteSpace: "nowrap",
         }}
       >
-        {state === "uploading" ? "Uploading…" : state === "done" ? "✓ Replaced" : "Upload MP3"}
+        {state === "deleting" ? "Deleting..." : "Delete"}
       </button>
       {state === "error" && (
         <span style={{ color: "#dc2626", fontSize: 12 }}>{errorMsg}</span>
@@ -120,59 +200,23 @@ function UploadButton({
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────
-export default function AdminAudioPage() {
-  const [token, setToken] = useState<string | null>(null);
-  const [loginError, setLoginError] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [logging, setLogging] = useState(false);
+export default function AudioManagerPage() {
+  const { token } = useTeacherAuth();
 
   const [islands, setIslands] = useState<Island[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
   const [filterIsland, setFilterIsland] = useState<number | null>(null);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem("lq_admin_token");
-    if (saved) setToken(saved);
-  }, []);
-
-  useEffect(() => {
-    if (!token) return;
-    setLoading(true);
     fetch(`${API}/api/islands`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setIslands(data);
-        else { setToken(null); sessionStorage.removeItem("lq_admin_token"); }
-      })
-      .catch(() => { setToken(null); sessionStorage.removeItem("lq_admin_token"); })
+      .then((data) => { if (Array.isArray(data)) setIslands(data); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLogging(true);
-    setLoginError("");
-    try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Login failed");
-      if (data.user?.role === "STUDENT") throw new Error("Student accounts cannot access the admin panel.");
-      sessionStorage.setItem("lq_admin_token", data.token);
-      setToken(data.token);
-    } catch (err: any) {
-      setLoginError(err.message);
-    } finally {
-      setLogging(false);
-    }
-  }
 
   function updateChallengeAudioUrl(islandId: string, pinId: string, challengeId: string, url: string) {
     setIslands((prev) =>
@@ -216,70 +260,23 @@ export default function AdminAudioPage() {
     );
   }
 
-  // ── Login screen ──
-  if (!token) {
-    return (
-      <main style={{ minHeight: "100vh", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <form onSubmit={handleLogin} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "2.5rem", width: 360, boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
-          <h1 style={{ color: "#f5c518", marginBottom: 4, fontSize: 24 }}>⚓ LinguaQuest</h1>
-          <p style={{ color: "#64748b", marginBottom: 28, fontSize: 14 }}>Teacher Audio Manager</p>
-          {loginError && (
-            <div style={{ background: "#fef2f2", color: "#dc2626", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 14, border: "1px solid #fecaca" }}>
-              {loginError}
-            </div>
-          )}
-          <label style={{ color: "#1e293b", fontSize: 13, display: "block", marginBottom: 4 }}>Username</label>
-          <input
-            type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-            required autoFocus
-            style={{ width: "100%", background: "#ffffff", border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", color: "#1e293b", fontSize: 15, marginBottom: 16, boxSizing: "border-box" }}
-          />
-          <label style={{ color: "#1e293b", fontSize: 13, display: "block", marginBottom: 4 }}>Password</label>
-          <input
-            type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: "100%", background: "#ffffff", border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", color: "#1e293b", fontSize: 15, marginBottom: 24, boxSizing: "border-box" }}
-          />
-          <button
-            type="submit" disabled={logging}
-            style={{ width: "100%", background: "#f5c518", color: "#0a0e1a", border: "none", borderRadius: 10, padding: "12px", fontWeight: 700, fontSize: 16, cursor: logging ? "not-allowed" : "pointer" }}
-          >
-            {logging ? "Logging in…" : "Log In"}
-          </button>
-        </form>
-      </main>
-    );
-  }
-
-  // ── Loading screen ──
   if (loading) {
-    return (
-      <main style={{ minHeight: "100vh", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "#64748b", fontSize: 18 }}>Loading islands…</p>
-      </main>
-    );
+    return <p style={{ color: "#64748b", fontSize: 18, textAlign: "center", marginTop: 80 }}>Loading islands...</p>;
   }
 
-  // ── Main admin UI ──
   const allChallenges = islands.flatMap((isl) => isl.pins.flatMap((pin) => pin.challenges));
   const withAudio = allChallenges.filter((c) => IS_REAL_URL(c.audioUrl)).length;
 
   return (
-    <main style={{ minHeight: "100vh", background: "#ffffff", padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
+    <>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
         <div>
-          <h1 style={{ color: "#f5c518", fontSize: 26, margin: 0 }}>⚓ LinguaQuest Audio Manager</h1>
+          <h1 style={{ color: "#1e293b", fontSize: 24, margin: 0 }}>Audio Manager</h1>
           <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0" }}>
             Challenge clips: {withAudio}/{allChallenges.length} uploaded
           </p>
         </div>
-        <button
-          onClick={() => { sessionStorage.removeItem("lq_admin_token"); setToken(null); }}
-          style={{ background: "transparent", border: "1px solid #d1d5db", color: "#64748b", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13 }}
-        >
-          Log out
-        </button>
       </div>
 
       {/* How to Use */}
@@ -292,8 +289,8 @@ export default function AdminAudioPage() {
             display: "flex", alignItems: "center", gap: 8,
           }}
         >
-          <span>📋 How to Use</span>
-          <span style={{ fontSize: 11, color: "#94a3b8" }}>{showGuide ? "▲ hide" : "▼ show"}</span>
+          <span>How to Use</span>
+          <span style={{ fontSize: 11, color: "#94a3b8" }}>{showGuide ? "hide" : "show"}</span>
         </button>
         {showGuide && (
           <div style={{
@@ -331,7 +328,7 @@ export default function AdminAudioPage() {
         )}
       </div>
 
-      {/* ── Island Filter ── */}
+      {/* Island Filter */}
       <div style={{ marginBottom: "1.5rem" }}>
         <p style={{ color: "#94a3b8", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
           Filter by island
@@ -365,11 +362,11 @@ export default function AdminAudioPage() {
         </div>
       </div>
 
-      {/* ── Audio Manager ── */}
+      {/* Audio Manager */}
       <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
         <div style={{ background: "#f8fafc", border: "1px solid #bfdbfe", borderRadius: 12, padding: "14px 20px" }}>
           <p style={{ margin: 0, fontSize: 13, color: "#1e293b", lineHeight: 1.6 }}>
-            <strong>📢 Recording Guide</strong> — Read each script aloud into your recording app, export as MP3, then upload below.
+            <strong>Recording Guide</strong> — Read each script aloud into your recording app, export as MP3, then upload below.
             Speak clearly at a natural pace — students will hear each clip once with no replay.
           </p>
         </div>
@@ -386,12 +383,12 @@ export default function AdminAudioPage() {
             {/* NPC Voice Clips */}
             <div style={{ background: "#f8fafc", border: "1px solid #bfdbfe", borderRadius: 12, padding: "16px 20px", marginBottom: 28 }}>
               <p style={{ color: "#94a3b8", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 14px" }}>
-                🧙 Captain Salita &amp; Ingay — Voice Clips
+                Captain Salita &amp; Ingay — Voice Clips
               </p>
               {/* Background Music */}
               <div style={{ display: "flex", gap: 16, alignItems: "flex-start", paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid #f1f5f9" }}>
                 <div style={{ flex: 1 }}>
-                  <p style={{ color: "#1e293b", fontWeight: 600, fontSize: 13, margin: "0 0 4px" }}>🎵 Background Music</p>
+                  <p style={{ color: "#1e293b", fontWeight: 600, fontSize: 13, margin: "0 0 4px" }}>Background Music</p>
                   <p style={{ color: "#64748b", fontSize: 12, margin: "0 0 6px", lineHeight: 1.5 }}>
                     Custom MP3 to loop while students are on this island. If not uploaded, a default track plays.
                   </p>
@@ -399,25 +396,36 @@ export default function AdminAudioPage() {
                     <audio controls src={island.bgMusicUrl} style={{ height: 26, width: "100%", maxWidth: 320 }} />
                   )}
                 </div>
-                <div style={{ flexShrink: 0 }}>
-                  <UploadButton
-                    targetType="island-bgmusic"
-                    targetId={island.id}
-                    token={token}
-                    onDone={(url) => updateIslandAudioUrl(island.id, "bgMusicUrl", url)}
-                  />
-                  <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 4, textAlign: "right" }}>
-                    {island.bgMusicUrl && IS_REAL_URL(island.bgMusicUrl) ? "Replace" : "Using default"}
+                <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <UploadButton
+                      targetType="island-bgmusic"
+                      targetId={island.id}
+                      token={token}
+                      onDone={(url) => updateIslandAudioUrl(island.id, "bgMusicUrl", url)}
+                      hasAudio={!!(island.bgMusicUrl && IS_REAL_URL(island.bgMusicUrl))}
+                    />
+                    {island.bgMusicUrl && IS_REAL_URL(island.bgMusicUrl) && (
+                      <DeleteButton
+                        targetType="island-bgmusic"
+                        targetId={island.id}
+                        token={token}
+                        onDeleted={() => updateIslandAudioUrl(island.id, "bgMusicUrl", "")}
+                      />
+                    )}
+                  </div>
+                  <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 0, textAlign: "right" }}>
+                    {island.bgMusicUrl && IS_REAL_URL(island.bgMusicUrl) ? "Uploaded" : "Using default"}
                   </p>
                 </div>
               </div>
 
               {(
                 [
-                  { label: "🧙 Captain Intro", text: island.npcDialogueIntro, field: "npcAudioIntro" as keyof Island, targetType: "island-intro", url: island.npcAudioIntro },
-                  { label: "✅ Captain Success", text: island.npcDialogueSuccess, field: "npcAudioSuccess" as keyof Island, targetType: "island-success", url: island.npcAudioSuccess },
-                  { label: "❌ Captain Fail", text: island.npcDialogueFail, field: "npcAudioFail" as keyof Island, targetType: "island-fail", url: island.npcAudioFail },
-                  { label: "⚡ Ingay Warning", text: island.ingayDialogue, field: "ingayAudioUrl" as keyof Island, targetType: "island-ingay", url: island.ingayAudioUrl },
+                  { label: "Captain Intro", text: island.npcDialogueIntro, field: "npcAudioIntro" as keyof Island, targetType: "island-intro", url: island.npcAudioIntro },
+                  { label: "Captain Success", text: island.npcDialogueSuccess, field: "npcAudioSuccess" as keyof Island, targetType: "island-success", url: island.npcAudioSuccess },
+                  { label: "Captain Fail", text: island.npcDialogueFail, field: "npcAudioFail" as keyof Island, targetType: "island-fail", url: island.npcAudioFail },
+                  { label: "Ingay Warning", text: island.ingayDialogue, field: "ingayAudioUrl" as keyof Island, targetType: "island-ingay", url: island.ingayAudioUrl },
                 ] as const
               ).map(({ label, text, field, targetType, url }) => (
                 <div
@@ -439,15 +447,26 @@ export default function AdminAudioPage() {
                       <audio controls src={url} style={{ height: 26, width: "100%", maxWidth: 320 }} />
                     )}
                   </div>
-                  <div style={{ flexShrink: 0 }}>
-                    <UploadButton
-                      targetType={targetType}
-                      targetId={island.id}
-                      token={token}
-                      onDone={(newUrl) => updateIslandAudioUrl(island.id, field, newUrl)}
-                    />
-                    <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 4, textAlign: "right" }}>
-                      {url && IS_REAL_URL(url) ? "Replace" : "Not uploaded"}
+                  <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <UploadButton
+                        targetType={targetType}
+                        targetId={island.id}
+                        token={token}
+                        onDone={(newUrl) => updateIslandAudioUrl(island.id, field, newUrl)}
+                        hasAudio={!!(url && IS_REAL_URL(url))}
+                      />
+                      {url && IS_REAL_URL(url) && (
+                        <DeleteButton
+                          targetType={targetType}
+                          targetId={island.id}
+                          token={token}
+                          onDeleted={() => updateIslandAudioUrl(island.id, field, "")}
+                        />
+                      )}
+                    </div>
+                    <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 0, textAlign: "right" }}>
+                      {url && IS_REAL_URL(url) ? "Uploaded" : "Not uploaded"}
                     </p>
                   </div>
                 </div>
@@ -458,7 +477,7 @@ export default function AdminAudioPage() {
             {island.pins.map((pin) => (
               <div key={pin.id} style={{ marginBottom: 24 }}>
                 <p style={{ color: "#94a3b8", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 10px" }}>
-                  📍 Pin {pin.number}
+                  Pin {pin.number}
                 </p>
                 {pin.challenges.map((ch, idx) => {
                   const hasAudio = IS_REAL_URL(ch.audioUrl);
@@ -483,7 +502,7 @@ export default function AdminAudioPage() {
                           {ch.audioScript && (
                             <div style={{ background: "#f8fafc", borderLeft: "3px solid #f5c518", borderRadius: "0 8px 8px 0", padding: "12px 16px", marginBottom: 12 }}>
                               <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                                📢 Script to read aloud
+                                Script to read aloud
                               </p>
                               <p style={{ margin: 0, fontSize: 14, color: "#1e293b", lineHeight: 1.7 }}>
                                 {ch.audioScript}
@@ -492,7 +511,7 @@ export default function AdminAudioPage() {
                           )}
 
                           <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
-                            <span style={{ fontWeight: 600, color: "#475569" }}>❓ </span>{ch.question}
+                            <span style={{ fontWeight: 600, color: "#475569" }}>Q: </span>{ch.question}
                           </p>
 
                           {hasAudio && (
@@ -500,26 +519,37 @@ export default function AdminAudioPage() {
                           )}
                         </div>
 
-                        <div style={{ flexShrink: 0, textAlign: "right" }}>
-                          <UploadButton
-                            targetType="challenge"
-                            targetId={ch.id}
-                            token={token}
-                            onDone={(url) => updateChallengeAudioUrl(island.id, pin.id, ch.id, url)}
-                          />
-                          <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>
-                            {hasAudio ? "Replace audio" : "No audio yet"}
+                        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <UploadButton
+                              targetType="challenge"
+                              targetId={ch.id}
+                              token={token}
+                              onDone={(url) => updateChallengeAudioUrl(island.id, pin.id, ch.id, url)}
+                              hasAudio={hasAudio}
+                            />
+                            {hasAudio && (
+                              <DeleteButton
+                                targetType="challenge"
+                                targetId={ch.id}
+                                token={token}
+                                onDeleted={() => updateChallengeAudioUrl(island.id, pin.id, ch.id, "")}
+                              />
+                            )}
+                          </div>
+                          <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 0 }}>
+                            {hasAudio ? "Uploaded" : "No audio yet"}
                           </p>
                         </div>
                       </div>
 
-                      {/* Explanation audio — Captain reads this when student answers correctly */}
+                      {/* Explanation audio */}
                       <div style={{ borderTop: "1px solid #f1f5f9", marginTop: 12, paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
                         <div style={{ flex: 1 }}>
-                          <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#475569" }}>🗣 Explanation Audio</p>
+                          <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#475569" }}>Explanation Audio</p>
                           <div style={{ background: "#f0fdf4", borderLeft: "3px solid #16a34a", borderRadius: "0 8px 8px 0", padding: "10px 14px", marginBottom: 8 }}>
                             <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                              📢 Script to read aloud
+                              Script to read aloud
                             </p>
                             <p style={{ margin: 0, fontSize: 13, color: "#1e293b", lineHeight: 1.6 }}>
                               {ch.explanation}
@@ -529,15 +559,26 @@ export default function AdminAudioPage() {
                             <audio controls src={ch.explanationAudioUrl} style={{ height: 26, width: "100%", maxWidth: 300 }} />
                           )}
                         </div>
-                        <div style={{ flexShrink: 0, textAlign: "right" }}>
-                          <UploadButton
-                            targetType="challenge-explanation"
-                            targetId={ch.id}
-                            token={token}
-                            onDone={(url) => updateChallengeExplanationAudioUrl(island.id, pin.id, ch.id, url)}
-                          />
-                          <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>
-                            {ch.explanationAudioUrl && IS_REAL_URL(ch.explanationAudioUrl) ? "Replace" : "Not uploaded"}
+                        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <UploadButton
+                              targetType="challenge-explanation"
+                              targetId={ch.id}
+                              token={token}
+                              onDone={(url) => updateChallengeExplanationAudioUrl(island.id, pin.id, ch.id, url)}
+                              hasAudio={!!(ch.explanationAudioUrl && IS_REAL_URL(ch.explanationAudioUrl))}
+                            />
+                            {ch.explanationAudioUrl && IS_REAL_URL(ch.explanationAudioUrl) && (
+                              <DeleteButton
+                                targetType="challenge-explanation"
+                                targetId={ch.id}
+                                token={token}
+                                onDeleted={() => updateChallengeExplanationAudioUrl(island.id, pin.id, ch.id, "")}
+                              />
+                            )}
+                          </div>
+                          <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 0 }}>
+                            {ch.explanationAudioUrl && IS_REAL_URL(ch.explanationAudioUrl) ? "Uploaded" : "Not uploaded"}
                           </p>
                         </div>
                       </div>
@@ -549,7 +590,6 @@ export default function AdminAudioPage() {
           </div>
         ))}
       </div>
-
-    </main>
+    </>
   );
 }

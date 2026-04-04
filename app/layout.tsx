@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "LinguaQuest Admin",
-  description: "LinguaQuest Teacher Admin Panel",
+  title: "LinguaQuest Teacher Portal",
+  description: "LinguaQuest Teacher Dashboard & Audio Manager",
 };
 
 export default function RootLayout({
