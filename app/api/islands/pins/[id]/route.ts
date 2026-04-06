@@ -38,8 +38,17 @@ export async function GET(
       return NextResponse.json({ error: SERVER_ERRORS.NOT_FOUND("Pin") }, { status: 404 });
     }
 
+    const dbUser = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { email: true },
+    });
+    const devEmails = (process.env.DEV_EMAILS ?? "andreicondino2@gmail.com")
+      .split(",")
+      .map((e) => e.trim());
+    const isDevUser = devEmails.includes(dbUser?.email ?? "");
+
     // BUG 21 FIX: verify this pin's island is unlocked for the requesting user
-    if (pin.island.number > 1) {
+    if (pin.island.number > 1 && !isDevUser) {
       const precedingIslands = await prisma.island.findMany({
         where: { number: { lt: pin.island.number } },
         include: { pins: { select: { id: true } } },

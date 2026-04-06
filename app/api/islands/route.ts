@@ -26,11 +26,20 @@ export async function GET(req: NextRequest) {
     const completedPinIds = new Set(allProgress.map((p) => p.pinId));
     const accuracyMap = new Map(allProgress.map((p) => [p.pinId, p.accuracy]));
 
+    const dbUser = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { email: true },
+    });
+    const devEmails = (process.env.DEV_EMAILS ?? "andreicondino2@gmail.com")
+      .split(",")
+      .map((e) => e.trim());
+    const isDevUser = devEmails.includes(dbUser?.email ?? "");
+
     const islandsWithLock = islands.map((island, idx) => {
       // Island 1 always unlocked; others unlock when all pins of ALL previous islands are completed
       // AND each previous island's cumulative average accuracy is ≥ ISLAND_PASS_THRESHOLD
       const isLocked =
-        idx === 0
+        isDevUser || idx === 0
           ? false
           : !islands.slice(0, idx).every((prev) => {
               if (!prev.pins.every((p) => completedPinIds.has(p.id))) return false;

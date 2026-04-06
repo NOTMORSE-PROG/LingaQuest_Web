@@ -50,6 +50,15 @@ export async function GET(
         : null;
     const islandPassed = allPinsCompleted && (cumulativeAccuracy ?? 0) >= ISLAND_PASS_THRESHOLD;
 
+    const dbUser = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { email: true },
+    });
+    const devEmails = (process.env.DEV_EMAILS ?? "andreicondino2@gmail.com")
+      .split(",")
+      .map((e) => e.trim());
+    const isDevUser = devEmails.includes(dbUser?.email ?? "");
+
     const ingaySeenRecord = await prisma.ingaySeen.findUnique({
       where: { userId_islandId: { userId: auth.userId, islandId: id } },
     });
@@ -60,6 +69,7 @@ export async function GET(
       cumulativeAccuracy,
       islandPassed,
       ingaySeen: !!ingaySeenRecord,
+      isDevUser,
     });
   } catch (err: unknown) {
     console.error("[GET /api/islands/[id]]", err);
