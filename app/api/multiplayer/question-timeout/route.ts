@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
   if (votes.length === 0) {
     // No votes = automatic wrong
-    crewAnswer = correctAnswer === "A" ? "B" : "A";
+    crewAnswer = "TIMEOUT";
     isCorrect = false;
   } else {
     // Majority of what exists

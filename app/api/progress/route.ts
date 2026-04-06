@@ -134,26 +134,33 @@ async function checkAndAwardBadges(userId: string) {
     toAward.push("sharp_ear");
   }
 
-  // Island badges: check if all pins on an island are done
+  // Island badges: check if all pins on an island are done AND accuracy meets threshold
   const islands = await prisma.island.findMany({
     include: { pins: { select: { id: true } } },
   });
   const completedPinIds = new Set(progress.map((p) => p.pinId));
+  const accuracyMap = new Map(progress.map((p) => [p.pinId, p.accuracy]));
 
   for (const island of islands) {
     const badgeKey = `island_${island.number}` as const;
-    if (island.pins.every((p) => completedPinIds.has(p.id)) && !earned.has(badgeKey)) {
+    const allPinsCompleted = island.pins.every((p) => completedPinIds.has(p.id));
+    if (!allPinsCompleted || earned.has(badgeKey) || island.pins.length === 0) continue;
+    const avgAccuracy = island.pins.reduce((sum, p) => sum + (accuracyMap.get(p.id) ?? 0), 0) / island.pins.length;
+    if (avgAccuracy >= ISLAND_PASS_THRESHOLD) {
       toAward.push(badgeKey);
     }
   }
 
-  // The Captain: all islands done
-  if (
-    islands.every((island) => island.pins.every((p) => completedPinIds.has(p.id))) &&
-    !earned.has("the_captain")
-  ) {
+  // The Captain: all islands done with passing accuracy
+  const allIslandsPassed = islands.every((island) => {
+    if (!island.pins.every((p) => completedPinIds.has(p.id))) return false;
+    if (island.pins.length === 0) return true;
+    const avg = island.pins.reduce((sum, p) => sum + (accuracyMap.get(p.id) ?? 0), 0) / island.pins.length;
+    return avg >= ISLAND_PASS_THRESHOLD;
+  });
+  if (allIslandsPassed && !earned.has("the_captain")) {
     toAward.push("the_captain");
-    toAward.push("island_conqueror");
+    if (!earned.has("island_conqueror")) toAward.push("island_conqueror");
   }
 
   if (toAward.length > 0) {
