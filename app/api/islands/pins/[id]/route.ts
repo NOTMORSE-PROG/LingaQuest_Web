@@ -82,6 +82,7 @@ export async function GET(
       ...pin,
       isCompleted: userProgress?.isCompleted ?? false,
       accuracy: userProgress?.accuracy ?? null,
+      isDevUser,
     });
   } catch (err: unknown) {
     console.error("[GET /api/islands/pins/[id]]", err);

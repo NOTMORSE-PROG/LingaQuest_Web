@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function checkAndAwardBadges(userId: string) {
+export async function checkAndAwardBadges(userId: string) {
   const progress = await prisma.progress.findMany({
     where: { userId, isCompleted: true },
     include: { pin: { include: { island: true } } },
