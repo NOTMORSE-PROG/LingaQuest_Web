@@ -143,11 +143,10 @@ function DeleteButton({
   token: string;
   onDeleted: () => void;
 }) {
-  const [state, setState] = useState<"idle" | "deleting" | "error">("idle");
+  const [state, setState] = useState<"idle" | "confirm" | "deleting" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
-  async function handleDelete() {
-    if (!confirm("Delete this audio clip? This cannot be undone.")) return;
+  async function handleConfirm() {
     setState("deleting");
     setErrorMsg("");
 
@@ -174,10 +173,40 @@ function DeleteButton({
     }
   }
 
+  if (state === "confirm") {
+    return (
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>Sure?</span>
+        <button
+          onClick={handleConfirm}
+          className="btn-hover"
+          style={{
+            background: "#dc2626", color: "white", border: "none",
+            borderRadius: 8, padding: "6px 12px", fontSize: 13,
+            cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap",
+          }}
+        >
+          Yes
+        </button>
+        <button
+          onClick={() => setState("idle")}
+          className="btn-hover-ghost"
+          style={{
+            background: "transparent", color: "#64748b", border: "1px solid #d1d5db",
+            borderRadius: 8, padding: "6px 12px", fontSize: 13,
+            cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap",
+          }}
+        >
+          No
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
       <button
-        onClick={handleDelete}
+        onClick={() => setState("confirm")}
         disabled={state === "deleting"}
         className="btn-hover-danger"
         style={{
@@ -272,7 +301,7 @@ export default function AudioManagerPage() {
   return (
     <>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
+      <div className="page-header">
         <div>
           <h1 style={{ color: "#1e293b", fontSize: 24, margin: 0 }}>Audio Manager</h1>
           <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0" }}>
@@ -391,7 +420,7 @@ export default function AudioManagerPage() {
                 Captain Salita &amp; Ingay — Voice Clips
               </p>
               {/* Background Music */}
-              <div style={{ display: "flex", gap: 16, alignItems: "flex-start", paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid #f1f5f9" }}>
+              <div className="audio-row" style={{ paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid #f1f5f9" }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ color: "#1e293b", fontWeight: 600, fontSize: 13, margin: "0 0 4px" }}>Background Music</p>
                   <p style={{ color: "#64748b", fontSize: 12, margin: "0 0 6px", lineHeight: 1.5 }}>
@@ -401,7 +430,7 @@ export default function AudioManagerPage() {
                     <audio controls src={island.bgMusicUrl} style={{ height: 26, width: "100%", maxWidth: 320 }} />
                   )}
                 </div>
-                <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                <div className="audio-row-actions" style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                   <div style={{ display: "flex", gap: 6 }}>
                     <UploadButton
                       targetType="island-bgmusic"
@@ -435,11 +464,8 @@ export default function AudioManagerPage() {
               ).map(({ label, text, field, targetType, url }) => (
                 <div
                   key={targetType}
-                  style={{
-                    display: "flex", gap: 16, alignItems: "flex-start",
-                    paddingBottom: 14, marginBottom: 14,
-                    borderBottom: "1px solid #f1f5f9",
-                  }}
+                  className="audio-row"
+                  style={{ paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid #f1f5f9" }}
                 >
                   <div style={{ flex: 1 }}>
                     <p style={{ color: "#1e293b", fontWeight: 600, fontSize: 13, margin: "0 0 4px" }}>{label}</p>
@@ -452,7 +478,7 @@ export default function AudioManagerPage() {
                       <audio controls src={url} style={{ height: 26, width: "100%", maxWidth: 320 }} />
                     )}
                   </div>
-                  <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  <div className="audio-row-actions" style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                     <div style={{ display: "flex", gap: 6 }}>
                       <UploadButton
                         targetType={targetType}
@@ -497,7 +523,7 @@ export default function AudioManagerPage() {
                         marginBottom: 12,
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+                      <div className="challenge-header-row">
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                             <div style={{ width: 10, height: 10, borderRadius: "50%", background: hasAudio ? "#16a34a" : "#cbd5e1", flexShrink: 0 }} />
@@ -524,7 +550,7 @@ export default function AudioManagerPage() {
                           )}
                         </div>
 
-                        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <div className="audio-row-actions" style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                           <div style={{ display: "flex", gap: 6 }}>
                             <UploadButton
                               targetType="challenge"
@@ -549,7 +575,7 @@ export default function AudioManagerPage() {
                       </div>
 
                       {/* Explanation audio */}
-                      <div style={{ borderTop: "1px solid #f1f5f9", marginTop: 12, paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+                      <div className="challenge-header-row" style={{ borderTop: "1px solid #f1f5f9", marginTop: 12, paddingTop: 12 }}>
                         <div style={{ flex: 1 }}>
                           <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#475569" }}>Explanation Audio</p>
                           <div style={{ background: "#f0fdf4", borderLeft: "3px solid #16a34a", borderRadius: "0 8px 8px 0", padding: "10px 14px", marginBottom: 8 }}>
@@ -564,7 +590,7 @@ export default function AudioManagerPage() {
                             <audio controls src={ch.explanationAudioUrl} style={{ height: 26, width: "100%", maxWidth: 300 }} />
                           )}
                         </div>
-                        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <div className="audio-row-actions" style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                           <div style={{ display: "flex", gap: 6 }}>
                             <UploadButton
                               targetType="challenge-explanation"

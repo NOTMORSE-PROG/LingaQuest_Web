@@ -107,21 +107,16 @@ export default function TeacherLayout({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{ token, logout }}>
       <div style={{ minHeight: "100vh", background: "#ffffff", fontFamily: "system-ui, sans-serif" }}>
         {/* Navbar */}
-        <nav style={{
+        <nav className="nav-inner" style={{
           background: "#ffffff",
           borderBottom: "1px solid #e2e8f0",
-          padding: "0 2rem",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          height: 56,
           position: "sticky",
           top: 0,
           zIndex: 50,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
             <span style={{ color: "#f5c518", fontWeight: 800, fontSize: 18 }}>LinguaQuest</span>
-            <div style={{ display: "flex", gap: 4 }}>
+            <div className="nav-links">
               {navLinks.map((link) => {
                 const active = pathname === link.href;
                 return (
@@ -155,7 +150,7 @@ export default function TeacherLayout({ children }: { children: ReactNode }) {
         </nav>
 
         {/* Page content */}
-        <div style={{ padding: "2rem" }}>
+        <div className="page-content">
           {children}
         </div>
       </div>
