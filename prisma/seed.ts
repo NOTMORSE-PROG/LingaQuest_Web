@@ -1312,8 +1312,12 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { username: "captain" },
-    update: {},
+    where: { email: "captain@linguaquest.app" },
+    update: {
+      username: "captain",
+      passwordHash: await hash("teacher123"),
+      role: "TEACHER",
+    },
     create: {
       username: "captain",
       email: "captain@linguaquest.app",
